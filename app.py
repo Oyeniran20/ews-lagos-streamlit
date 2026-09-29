@@ -50,13 +50,36 @@ theme.note(
 st.markdown("### A note on honesty in this app")
 theme.note(
     "The <b>live prediction demo</b> below trains on the sample dataset shipped in "
-    "this repository (8 of Lagos's 20 LGAs, 1990&ndash;1999). Its own metrics, shown "
+    "this repository (8 of Lagos's 20 LGAs, 2010&ndash;2024). Its own metrics, shown "
     "further down, are real and computed live &mdash; but they are not the thesis's "
     "official results. The <b>Results Dashboard</b> page (see sidebar) instead quotes "
     "the thesis's official Chapter 4 evaluation verbatim, run on the complete "
     "engineered dataset. The two are kept clearly separate throughout this app; "
     "nothing here is invented."
 )
+
+ALERT_ACTIONS = {
+    "Low": "Business as usual; routine monitoring continues",
+    "Medium": "Public advisories, community preparedness, LASEMA pre-positioning",
+    "High": "Full emergency response: evacuation planning, cooling centres, NEMA coordination",
+}
+ALERT_RANGE = {"Low": "< 0.30", "Medium": "0.30 – 0.50", "High": "≥ 0.50"}
+
+
+def alert_banner(hazard_icon: str, hazard_label: str, tier: str, probability: float) -> str:
+    color = TIER_COLOR[tier]
+    return f"""
+    <div style="background:{color};border-radius:16px;padding:1.5rem 1.7rem;color:white;">
+        <div style="font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9;">
+            {hazard_icon} {hazard_label} &middot; Tomorrow's Alert
+        </div>
+        <div style="font-size:2.1rem;font-weight:800;font-family:Cambria,serif;margin:0.25rem 0 0.35rem 0;line-height:1.1;">
+            {tier.upper()} RISK
+            <span style="font-size:1.15rem;font-weight:600;opacity:0.85;">&nbsp;({probability:.0%} probability)</span>
+        </div>
+        <div style="font-size:0.98rem;opacity:0.96;">{ALERT_ACTIONS[tier]}</div>
+    </div>
+    """
 
 with st.spinner("Warming up the demo model…"):
     pipe = get_pipeline("data/lagos_features.csv")
@@ -144,7 +167,27 @@ else:
     actual_heat = actual_flood = None
 
 st.markdown("---")
-st.markdown("### 🚨 Tomorrow's predicted risk")
+st.markdown("## 🚨 Tomorrow's Predicted Alert")
+st.caption("This is the actual output of the framework — the ensemble's risk call for tomorrow, translated into an alert tier.")
+
+ab1, ab2 = st.columns(2)
+ab1.markdown(
+    alert_banner("🌡️", "Extreme Heat", heat_out["tier"], heat_out["Ensemble"]),
+    unsafe_allow_html=True,
+)
+ab2.markdown(
+    alert_banner("🌊", "Flash Flood", flood_out["tier"], flood_out["Ensemble"]),
+    unsafe_allow_html=True,
+)
+if actual_heat is not None or actual_flood is not None:
+    ac1, ac2 = st.columns(2)
+    if actual_heat is not None:
+        ac1.caption(f"What actually happened: {'🔴 Extreme heat day' if actual_heat else '🟢 Not an extreme heat day'}")
+    if actual_flood is not None:
+        ac2.caption(f"What actually happened: {'🔴 Flood-exceedance day' if actual_flood else '🟢 Not a flood-exceedance day'}")
+
+st.markdown("")
+st.markdown("#### Model confidence (probability gauges)")
 
 
 def gauge(value: float, tier: str, title: str) -> go.Figure:
@@ -173,14 +216,8 @@ def gauge(value: float, tier: str, title: str) -> go.Figure:
 g1, g2 = st.columns(2)
 with g1:
     st.plotly_chart(gauge(heat_out["Ensemble"], heat_out["tier"], "Extreme Heat Risk"), use_container_width=True)
-    st.markdown(theme.tier_pill(heat_out["tier"]), unsafe_allow_html=True)
-    if actual_heat is not None:
-        st.caption(f"What actually happened: {'🔴 Extreme heat day' if actual_heat else '🟢 Not an extreme heat day'}")
 with g2:
     st.plotly_chart(gauge(flood_out["Ensemble"], flood_out["tier"], "Flash Flood Risk"), use_container_width=True)
-    st.markdown(theme.tier_pill(flood_out["tier"]), unsafe_allow_html=True)
-    if actual_flood is not None:
-        st.caption(f"What actually happened: {'🔴 Flood-exceedance day' if actual_flood else '🟢 Not a flood-exceedance day'}")
 
 st.markdown("### How the three base learners voted")
 b1, b2 = st.columns(2)
@@ -234,11 +271,7 @@ for col, (title, desc) in zip([m1, m2, m3, m4], groups):
 st.markdown("")
 st.markdown("#### From probability to a public alert")
 t1, t2, t3 = st.columns(3)
-tiers = [
-    ("Low", "< 0.30", theme.GREEN, "Business as usual; routine monitoring continues"),
-    ("Medium", "0.30 – 0.50", theme.AMBER, "Public advisories, community preparedness, LASEMA pre-positioning"),
-    ("High", "≥ 0.50", theme.CORAL, "Full emergency response: evacuation planning, cooling centres, NEMA coordination"),
-]
+tiers = [(name, ALERT_RANGE[name], TIER_COLOR[name], ALERT_ACTIONS[name]) for name in ["Low", "Medium", "High"]]
 for col, (name, rng, color, desc) in zip([t1, t2, t3], tiers):
     col.markdown(
         f'<div style="background:{color};border-radius:14px;padding:1.1rem 1.2rem;color:white;height:100%;">'
